@@ -21,6 +21,10 @@ func TestDriveFailureDetector(t *testing.T) {
 }
 
 func generateRandomItem() *EndpointSample {
+	var err error
+	if rand.Intn(2) == 1 {
+		err = fmt.Errorf("nasty error")
+	}
 	return &EndpointSample{
 		fmt.Sprintf("%d", rand.Intn(10)),
 		"etcd",
@@ -28,6 +32,6 @@ func generateRandomItem() *EndpointSample {
 			Scheme: "https",
 			Host:   fmt.Sprintf("1.1.1.%d:6443", rand.Intn(3)),
 		},
-		nil,
+		err,
 	}
 }
