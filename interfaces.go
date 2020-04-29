@@ -24,6 +24,9 @@ type Store interface {
 
 	// Get retrieves an object from the store at the given key
 	Get(key string) interface{}
+
+	// List returns all objects in the store
+	List() []interface{}
 }
 
 // WeightedEndpointStatusStore an in-memory store for WeightedEndpointStatus.
@@ -35,6 +38,9 @@ type WeightedEndpointStatusStore interface {
 
 	// Get retrieves WeightedEndpointStatus from the store at the given key
 	Get(key string) *WeightedEndpointStatus
+
+	// List returns all WeightedEndpointStatus in the store
+	List() []*WeightedEndpointStatus
 }
 
 // endpointStore implements WeightedEndpointStatusStore interface
@@ -59,6 +65,16 @@ func (e *endpointStore) Get(key string) *WeightedEndpointStatus {
 		return nil
 	}
 	return rawEndpoint.(*WeightedEndpointStatus)
+}
+
+// List returns all WeightedEndpointStatus in the store
+func (e *endpointStore) List() []*WeightedEndpointStatus {
+	rawEndpoints := e.Store.List()
+	endpoints := make([]*WeightedEndpointStatus, len(rawEndpoints))
+	for idx, rawEndpoint := range rawEndpoints {
+		endpoints[idx] = rawEndpoint.(*WeightedEndpointStatus)
+	}
+	return endpoints
 }
 
 // BatchQueue represents a generic work queue that process items in the order in which they were added,

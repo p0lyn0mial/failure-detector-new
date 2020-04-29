@@ -2,6 +2,7 @@ package failure_detector
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	batchqueue "github.com/p0lyn0mial/batch-working-queue"
@@ -12,7 +13,6 @@ import (
 )
 
 // failureDetector is receiving endpoint samples and maintains endpoint status according to logic implemented by a policy evaluator
-// - TODO: internal state is replicated to external storage (atomic.Value) for probing via XYZ() method
 type failureDetector struct {
 	// endpointSampleKeyFn maps collected sample (EndpointSample) for a service to the internal store
 	endpointSampleKeyFn KeyFunc
@@ -22,6 +22,9 @@ type failureDetector struct {
 
 	// store holds WeightedEndpointStatusStore (samples) per service (namespace/service)
 	store map[string]WeightedEndpointStatusStore
+
+	// readOnlyStore holds a copy of the store that is safe for concurrent (read) access
+	readOnlyStore atomic.Value
 
 	// createStoreFn a helper function for creating the WeightedEndpointStatusStore store
 	createStoreFn NewStoreFunc
@@ -89,7 +92,7 @@ func (fd *failureDetector) processBatch(endpointSamples []*EndpointSample) {
 
 	fd.store[batchKey] = endpointsStore
 	if hasChanged {
-		// TODO: propagate if the status changed
+		fd.propagateChangesToReadOnlyStore()
 	}
 }
 
@@ -107,4 +110,22 @@ func convertToKeySample(epSample *EndpointSample) (string, *Sample) {
 	return EndpointSampleKeyFunction(epSample), &Sample{
 		err: epSample.err,
 	}
+}
+
+// propagateChangesToReadOnlyStore makes a copy of fd.store and puts it into fd.readOnlyStore
+func (fd *failureDetector) propagateChangesToReadOnlyStore() {
+	serviceStoreCopy := map[string]WeightedEndpointStatusStore{}
+	for serviceKey, epStore := range fd.store {
+		newEpStore := fd.createStoreFn(24 * 365 * time.Hour)
+		for _, weightedEndpointStatus := range epStore.List() {
+			weightedEndpointStatusCopy := newWeightedEndpoint(0, weightedEndpointStatus.url)
+			weightedEndpointStatusCopy.weight = weightedEndpointStatus.weight
+			weightedEndpointStatusCopy.status = weightedEndpointStatus.status
+			newEpStore.Add(endpointKeyFunction(weightedEndpointStatusCopy), weightedEndpointStatusCopy)
+
+		}
+		serviceStoreCopy[serviceKey] = newEpStore
+	}
+
+	fd.readOnlyStore.Store(serviceStoreCopy)
 }
